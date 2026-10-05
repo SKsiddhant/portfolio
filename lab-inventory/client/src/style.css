@@ -1,0 +1,9 @@
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:#f4f6f8;color:#1c2430}
+header{background:#12304a;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+main{max-width:1000px;margin:20px auto;padding:0 16px;display:grid;gap:16px}
+.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px #0002}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e3e8ee}
+input,select,button{font:inherit;padding:6px 10px;border:1px solid #b9c3cf;border-radius:5px}
+button{background:#1d6fb8;color:#fff;border:0;cursor:pointer}button.alt{background:#5b6b7c}button.del{background:#b83a3a}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.low{background:#fff1e0}.badge{background:#e0801f;color:#fff;border-radius:10px;padding:1px 8px;font-size:12px}
+.err{color:#b83a3a}.ok{color:#1b7a43}

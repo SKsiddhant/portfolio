@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Petitions</title>
+<style>body{font:16px system-ui,sans-serif;max-width:760px;margin:20px auto;padding:0 16px;background:#f6f7f9}.c{background:#fff;padding:14px;border-radius:8px;margin:12px 0;box-shadow:0 1px 3px #0002}
+#ed{min-height:100px;border:1px solid #bbb;padding:8px;border-radius:6px;background:#fff}input,button{font:inherit;padding:6px 10px;margin:2px}button{background:#1d6fb8;color:#fff;border:0;border-radius:5px;cursor:pointer}.err{color:#b83a3a}.n{font-size:28px;font-weight:bold}</style></head>
+<body><h1>Campus Petitions</h1>
+<div class="c"><h3>Start a petition</h3><input id="t" placeholder="Title" size="40">
+<div><button data-c="bold"><b>B</b></button><button data-c="italic"><i>I</i></button><button data-c="insertUnorderedList">• List</button></div>
+<div id="ed" contenteditable="true"></div><button id="new">Publish</button> <span id="saved"></span></div>
+<div id="list"></div>
+<script>
+const $=id=>document.getElementById(id);let cur=null,timer;
+const j=async(u,o={})=>{const r=await fetch(u,{...o,headers:{'Content-Type':'application/json'},body:o.json?JSON.stringify(o.json):undefined});const d=await r.json();if(!r.ok)throw new Error(d.error);return d};
+document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>document.execCommand(b.dataset.c));
+const clean=h=>{const d=document.createElement('div');d.innerHTML=h;d.querySelectorAll('*').forEach(e=>{if(!['B','I','UL','LI','BR','DIV','P'].includes(e.tagName))e.replaceWith(document.createTextNode(e.textContent));else[...e.attributes].forEach(a=>e.removeAttribute(a.name))});return d.innerHTML};
+$('ed').oninput=()=>{if(!cur)return;$('saved').textContent='Saving…';clearTimeout(timer);timer=setTimeout(async()=>{await j('/api/petitions/'+cur,{method:'PUT',json:{title:$('t').value,body:clean($('ed').innerHTML)}});$('saved').textContent='Saved'},700)};
+$('new').onclick=async()=>{try{const p=await j('/api/petitions',{method:'POST',json:{title:$('t').value,body:clean($('ed').innerHTML)||' '}});cur=p.id;$('saved').textContent='Published';load()}catch(e){$('saved').textContent=e.message}};
+async function load(){const ps=await j('/api/petitions');$('list').innerHTML='';for(const p of ps){const d=document.createElement('div');d.className='c';
+d.innerHTML=`<h3></h3><div class="b"></div><div class="n" id="n${p.id}">${p.signatures}</div> signatures<br><input placeholder="Name"><input placeholder="you@college.edu"><button>Sign</button> <span class="err"></span>`;
+d.querySelector('h3').textContent=p.title;d.querySelector('.b').innerHTML=clean(p.body);
+const [nm,em]=d.querySelectorAll('input');d.querySelector('button').onclick=async()=>{try{await j(`/api/petitions/${p.id}/sign`,{method:'POST',json:{name:nm.value,email:em.value}});d.querySelector('.err').textContent=''}catch(e){d.querySelector('.err').textContent=e.message}};
+$('list').append(d);new EventSource(`/api/petitions/${p.id}/live`).onmessage=m=>$('n'+p.id).textContent=JSON.parse(m.data).signatures}}
+load();
+</script></body></html>

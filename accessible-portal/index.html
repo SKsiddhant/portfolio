@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Student Help Portal</title>
+<style>body{font:18px system-ui,sans-serif;margin:0;background:#fffdf5;color:#111}body.big{font-size:24px}body.contrast{background:#000;color:#ff0}
+header,main{max-width:760px;margin:auto;padding:12px 16px}button,select,input{font:inherit;padding:8px 12px;margin:2px}
+#log{border:2px solid #444;min-height:140px;padding:8px;border-radius:8px;overflow:auto;max-height:260px}.me{text-align:right;color:#1d4f91}body.contrast .me{color:#0ff}
+#kb button{min-width:36px}.soon{font-weight:bold}li{margin:6px 0}:focus-visible{outline:3px solid #e0801f}</style></head>
+<body><header><h1 id="title"></h1>
+<select id="lang" aria-label="Language"></select>
+<button id="big" aria-pressed="false">A+</button><button id="con" aria-pressed="false">Contrast</button></header>
+<main><section aria-live="polite" id="log"></section>
+<form id="f"><input id="q" size="30" autocomplete="off"><button id="send"></button><button type="button" id="speak"></button><button type="button" id="kbt">⌨</button></form>
+<div id="kb" hidden></div>
+<h2 id="nt"></h2><ul id="notes"></ul></main>
+<script type="module">
+import { LANGS, t, reply, upcoming, KEYBOARD, typeKey } from './src/logic.js';
+const $ = (id) => document.getElementById(id);
+let lang = 'en', last = '';
+const NOTICES = [{ title: 'Unit test 1', date: '2026-10-20' }, { title: 'Fee deadline', date: '2026-10-10' }, { title: 'Library closed', date: '2026-10-14' }];
+$('lang').innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+function render() {
+  document.documentElement.lang = lang;
+  $('title').textContent = t(lang, 'title'); $('q').placeholder = t(lang, 'ask'); $('send').textContent = t(lang, 'send');
+  $('speak').textContent = '🔊 ' + t(lang, 'read'); $('nt').textContent = t(lang, 'notices');
+  $('notes').innerHTML = upcoming(NOTICES, new Date()).map((n) => `<li class="${n.soon ? 'soon' : ''}">${n.title} — ${n.date}${n.soon ? ' ⚠' : ''}</li>`).join('');
+  $('kb').innerHTML = [...KEYBOARD[lang], ['SPACE', 'BACK']].map((r) => '<div>' + [...(typeof r === 'string' ? r : r)].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join('') + '</div>').join('').replace(/data-k="SPACE">[^<]*/, 'data-k="SPACE">␣').replace(/data-k="BACK">[^<]*/, 'data-k="BACK">⌫');
+}
+function say(text, cls) { const p = document.createElement('p'); p.textContent = text; p.className = cls || ''; $('log').append(p); $('log').scrollTop = 1e9; if (!cls) last = text; }
+$('lang').onchange = (e) => { lang = e.target.value; render(); };
+$('f').onsubmit = (e) => { e.preventDefault(); const v = $('q').value.trim(); if (!v) return; say(v, 'me'); say(reply(v, lang).text); $('q').value = ''; };
+$('speak').onclick = () => { if (!('speechSynthesis' in window) || !last) return; const u = new SpeechSynthesisUtterance(last); u.lang = { en: 'en-IN', hi: 'hi-IN', gu: 'gu-IN' }[lang]; speechSynthesis.cancel(); speechSynthesis.speak(u); };
+$('kbt').onclick = () => { $('kb').hidden = !$('kb').hidden; };
+$('kb').onclick = (e) => { const k = e.target.dataset?.k; if (k) { $('q').value = typeKey($('q').value, k); $('q').focus(); } };
+$('big').onclick = (e) => { e.target.setAttribute('aria-pressed', document.body.classList.toggle('big')); };
+$('con').onclick = (e) => { e.target.setAttribute('aria-pressed', document.body.classList.toggle('contrast')); };
+render(); say(t(lang, 'hello'));
+</script></body></html>

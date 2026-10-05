@@ -1,0 +1,1 @@
+{"name":"petition-platform","version":"1.0.0","type":"module","scripts":{"start":"node server/index.js","test":"node --test --no-warnings tests/api.test.js"},"dependencies":{"express":"^4.19.2"}}

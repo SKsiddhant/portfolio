@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solar Flare Detector</title>
+<style>
+:root{--bg:#0b0d14;--panel:#141824;--ink:#e8ebf5;--mute:#8e96b0;--line:#252b3d;--sun:#ffb347;--smooth:#6fd6c8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:16px}
+main{max-width:1000px;margin:0 auto}h1{font-size:1.5rem;margin:8px 0 4px}p.sub{color:var(--mute);margin:0 0 18px}
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+label{display:grid;gap:4px;font-size:.8rem;color:var(--mute)}input[type=range]{width:150px}
+button,.file{background:var(--sun);color:#1a1200;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:.9rem}
+button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+#chart{width:100%;height:340px;background:var(--panel);border:1px solid var(--line);border-radius:10px;display:block}
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.88rem;display:block;overflow-x:auto}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:500}
+#msg{color:#ff9d8a;min-height:1.4em}
+</style></head><body><main>
+<h1>Solar Flare Detector</h1>
+<p class="sub">Finds X-ray bursts in a light curve, fits each one and gives it a GOES-style class. Demo data is synthetic.</p>
+<div class="bar">
+ <label>Smoothing σ <span id="sv">3</span><input id="sigma" type="range" min="1" max="10" step="0.5" value="3"></label>
+ <label>Sensitivity <span id="pv">4</span><input id="prom" type="range" min="2" max="10" step="0.5" value="4"></label>
+ <button id="demo">Run demo</button>
+ <label class="file" style="color:#1a1200">Upload CSV (time, flux)<input id="file" type="file" accept=".csv,text/csv" hidden></label>
+ <button class="alt" id="export" disabled>Export bursts CSV</button>
+</div>
+<div id="msg" role="alert"></div>
+<canvas id="chart" aria-label="Light curve with detected bursts"></canvas>
+<table><thead><tr><th>#</th><th>Peak time (s)</th><th>Peak flux (W/m²)</th><th>Rise (s)</th><th>Decay (s)</th><th>Class</th></tr></thead><tbody id="rows"></tbody></table>
+</main>
+<script>
+const $=id=>document.getElementById(id);let last=null,lastFile=null;
+const q=()=>`sigma=${$('sigma').value}&prominence=${$('prom').value}`;
+$('sigma').oninput=e=>{$('sv').textContent=e.target.value};$('prom').oninput=e=>{$('pv').textContent=e.target.value};
+$('sigma').onchange=$('prom').onchange=()=>lastFile?upload(lastFile):demo();
+async function show(r){const j=await r.json();if(!r.ok){$('msg').textContent=j.error;return}$('msg').textContent='';last=j;draw(j);table(j);$('export').disabled=!j.bursts.length}
+const demo=()=>{lastFile=null;return fetch('/api/demo?'+q()).then(show)};
+function upload(f){lastFile=f;const fd=new FormData();fd.append('file',f);fd.append('sigma',$('sigma').value);fd.append('prominence',$('prom').value);return fetch('/api/analyse',{method:'POST',body:fd}).then(show)}
+$('demo').onclick=demo;$('file').onchange=e=>e.target.files[0]&&upload(e.target.files[0]);
+$('export').onclick=async()=>{const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bursts:last.bursts})});const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='bursts.csv';a.click()};
+const f=n=>Number.isFinite(n)?n.toPrecision(3):'–';
+function table(j){$('rows').innerHTML=j.bursts.map((b,i)=>`<tr><td>${i+1}</td><td>${b.peak_time.toFixed(0)}</td><td>${f(b.peak_flux)}</td><td>${f(b.rise_time)}</td><td>${f(b.decay_time)}</td><td>${b.flare_class}</td></tr>`).join('')||'<tr><td colspan="6">No bursts found at this sensitivity.</td></tr>'}
+function draw(j){const c=$('chart'),dpr=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);
+ const m={l:58,r:14,t:14,b:30},t0=j.time[0],t1=j.time.at(-1),lo=Math.log10(Math.min(...j.flux.filter(v=>v>0))),hi=Math.log10(Math.max(...j.flux));
+ const X=t=>m.l+(t-t0)/(t1-t0)*(w-m.l-m.r),Y=v=>m.t+(1-(Math.log10(Math.max(v,1e-12))-lo)/(hi-lo||1))*(h-m.t-m.b);
+ x.strokeStyle='#252b3d';x.fillStyle='#8e96b0';x.font='11px system-ui';x.textAlign='right';
+ for(let e=Math.ceil(lo);e<=Math.floor(hi);e++){const y=Y(10**e);x.beginPath();x.moveTo(m.l,y);x.lineTo(w-m.r,y);x.stroke();x.fillText('1e'+e,m.l-6,y+4)}
+ x.textAlign='center';for(let i=0;i<=5;i++){const t=t0+(t1-t0)*i/5;x.fillText(t.toFixed(0)+' s',X(t),h-10)}
+ const line=(a,col,wd)=>{x.beginPath();a.forEach((v,i)=>i?x.lineTo(X(j.time[i]),Y(v)):x.moveTo(X(j.time[i]),Y(v)));x.strokeStyle=col;x.lineWidth=wd;x.stroke()};
+ line(j.flux,'rgba(255,179,71,.55)',1);line(j.smoothed,'#6fd6c8',1.6);
+ x.fillStyle='#ffb347';x.textAlign='center';j.bursts.forEach(b=>{const px=X(b.peak_time),py=Y(b.peak_flux);x.beginPath();x.arc(px,py,4,0,7);x.fill();x.fillText(b.flare_class,px,py-9)})}
+addEventListener('resize',()=>last&&draw(last));demo();
+</script></body></html>
