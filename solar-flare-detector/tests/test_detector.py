@@ -54,6 +54,31 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.c.post("/api/analyse").status_code, 400)
 
+    def test_unsorted_duplicate_and_nan_rows_are_handled(self):
+        t, f = synthetic_light_curve()
+        rows = list(zip(t, f))
+        rows = rows[::-1] + rows[:5] + [(float("nan"), 1.0), (5.0, float("inf"))]  # reversed, duplicated, bad rows
+        csv_text = "time,flux\n" + "\n".join(f"{a},{b}" for a, b in rows)
+        r = self.c.post("/api/analyse", data={"file": (io.BytesIO(csv_text.encode()), "lc.csv")})
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(len(r.get_json()["bursts"]), 3)
+
+    def test_response_is_strict_json(self):
+        # NaN is not valid JSON; the browser's response.json() would throw on it.
+        body = self.c.get("/api/demo").get_data(as_text=True)
+        self.assertNotIn("NaN", body)
+        self.assertNotIn("Infinity", body)
+
+    def test_bad_parameters_return_400_not_500(self):
+        self.assertEqual(self.c.get("/api/demo?sigma=abc").status_code, 400)
+        self.assertEqual(self.c.get("/api/demo?sigma=0").status_code, 400)
+        self.assertEqual(self.c.get("/api/demo?seed=x").status_code, 400)
+        self.assertEqual(self.c.get("/api/demo?prominence=-1").status_code, 400)
+
+    def test_export_rejects_malformed_body(self):
+        self.assertEqual(self.c.post("/api/export", json={"bursts": [{"peak_time": 1}]}).status_code, 400)
+        self.assertEqual(self.c.post("/api/export", data="not json").status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

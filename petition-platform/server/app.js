@@ -1,7 +1,9 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 export function createApp({ allowedDomain = 'college.edu', db = new DatabaseSync(':memory:') } = {}) {
+  allowedDomain = String(allowedDomain).trim().toLowerCase().replace(/^@/, ''); // emails are lowercased before comparing
   db.exec(`
     CREATE TABLE IF NOT EXISTS petitions (id INTEGER PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, created TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS signatures (petition_id INTEGER NOT NULL REFERENCES petitions(id), email TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(petition_id, email));`);
@@ -51,6 +53,7 @@ export function createApp({ allowedDomain = 'college.edu', db = new DatabaseSync
     req.on('close', () => clients.get(id).delete(res));
   });
 
-  app.use(express.static(new URL('../public', import.meta.url).pathname));
+  // .pathname stays percent-encoded and breaks on spaces / Windows drive letters; fileURLToPath doesn't.
+  app.use(express.static(fileURLToPath(new URL('../public', import.meta.url))));
   return app;
 }

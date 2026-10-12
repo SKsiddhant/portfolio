@@ -1,10 +1,20 @@
+import { randomBytes } from 'node:crypto';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { openDb } from './db.js';
 import { parseCsv, toCsv } from './csv.js';
 
-export function createApp({ db = openDb(), secret = process.env.JWT_SECRET || 'dev-only-secret' } = {}) {
+// Never fall back to a known, hardcoded signing secret: anyone who has read the
+// source could forge login tokens. Require JWT_SECRET in production; in dev/test
+// use a random per-process secret (tokens simply stop working after a restart).
+function resolveSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') throw new Error('JWT_SECRET must be set when NODE_ENV=production');
+  return randomBytes(32).toString('hex');
+}
+
+export function createApp({ db = openDb(), secret = resolveSecret() } = {}) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use(express.text({ type: 'text/csv', limit: '2mb' }));
@@ -47,8 +57,11 @@ export function createApp({ db = openDb(), secret = process.env.JWT_SECRET || 'd
     res.json(rows.map(withLow));
   });
 
+  // A blank cell must not silently become 0 (Number('') === 0), so treat it as missing.
+  const num = (v, fallback) => (v === undefined || v === null || String(v).trim() === '' ? fallback : Number(v));
+
   function readItem(b) {
-    const item = { sku: String(b.sku ?? '').trim(), name: String(b.name ?? '').trim(), lab: String(b.lab ?? '').trim(), quantity: Number(b.quantity), min_quantity: Number(b.min_quantity ?? 0) };
+    const item = { sku: String(b.sku ?? '').trim(), name: String(b.name ?? '').trim(), lab: String(b.lab ?? '').trim(), quantity: num(b.quantity, NaN), min_quantity: num(b.min_quantity, 0) };
     if (!item.sku || !item.name || !item.lab) return { error: 'SKU, name and lab are required.' };
     if (!posInt(item.quantity) || !posInt(item.min_quantity)) return { error: 'Quantities must be whole numbers, zero or more.' };
     return { item };
@@ -94,13 +107,19 @@ export function createApp({ db = openDb(), secret = process.env.JWT_SECRET || 'd
       ON CONFLICT(sku) DO UPDATE SET name=excluded.name, lab=excluded.lab, quantity=excluded.quantity, min_quantity=excluded.min_quantity`);
     const errors = []; let imported = 0;
     db.exec('BEGIN');
-    rows.forEach((r, i) => {
-      const o = Object.fromEntries(cols.map((c, k) => [c, r[k]]));
-      const { item, error } = readItem(o);
-      if (error) return errors.push({ line: i + 2, error });
-      upsert.run(item.sku, item.name, item.lab, item.quantity, item.min_quantity); imported++;
-    });
-    db.exec('COMMIT');
+    try {
+      rows.forEach((r, i) => {
+        const o = Object.fromEntries(cols.map((c, k) => [c, r[k]]));
+        const { item, error } = readItem(o);
+        if (error) return errors.push({ line: i + 2, error });
+        upsert.run(item.sku, item.name, item.lab, item.quantity, item.min_quantity); imported++;
+      });
+      db.exec('COMMIT');
+    } catch {
+      // Without this, a failure mid-import leaves the connection stuck inside an open transaction.
+      db.exec('ROLLBACK');
+      return bad(res, 'Import failed; no rows were saved.', 500);
+    }
     res.json({ imported, errors });
   });
 
