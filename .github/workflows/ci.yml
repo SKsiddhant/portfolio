@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [lab-inventory, petition-platform, accessible-portal]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        if: ${{ hashFiles(format('{0}/package-lock.json', matrix.project)) != '' }}
+      - run: npm test
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: solar-flare-detector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests
