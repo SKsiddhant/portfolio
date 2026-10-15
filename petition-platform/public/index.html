@@ -10,13 +10,16 @@
 const $=id=>document.getElementById(id);let cur=null,timer;
 const j=async(u,o={})=>{const r=await fetch(u,{...o,headers:{'Content-Type':'application/json'},body:o.json?JSON.stringify(o.json):undefined});const d=await r.json();if(!r.ok)throw new Error(d.error);return d};
 document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>document.execCommand(b.dataset.c));
-const clean=h=>{const d=document.createElement('div');d.innerHTML=h;d.querySelectorAll('*').forEach(e=>{if(!['B','I','UL','LI','BR','DIV','P'].includes(e.tagName))e.replaceWith(document.createTextNode(e.textContent));else[...e.attributes].forEach(a=>e.removeAttribute(a.name))});return d.innerHTML};
+/* Parse in an inert document (DOMParser). Parsing untrusted HTML via innerHTML on a detached
+   element still fires <img onerror=...>, which made this sanitiser an XSS hole. */
+const clean=h=>{const d=new DOMParser().parseFromString(String(h),'text/html').body;d.querySelectorAll('*').forEach(e=>{if(!['B','I','UL','LI','BR','DIV','P'].includes(e.tagName))e.replaceWith(document.createTextNode(e.textContent));else[...e.attributes].forEach(a=>e.removeAttribute(a.name))});return d.innerHTML};
 $('ed').oninput=()=>{if(!cur)return;$('saved').textContent='Saving…';clearTimeout(timer);timer=setTimeout(async()=>{await j('/api/petitions/'+cur,{method:'PUT',json:{title:$('t').value,body:clean($('ed').innerHTML)}});$('saved').textContent='Saved'},700)};
 $('new').onclick=async()=>{try{const p=await j('/api/petitions',{method:'POST',json:{title:$('t').value,body:clean($('ed').innerHTML)||' '}});cur=p.id;$('saved').textContent='Published';load()}catch(e){$('saved').textContent=e.message}};
-async function load(){const ps=await j('/api/petitions');$('list').innerHTML='';for(const p of ps){const d=document.createElement('div');d.className='c';
+let sources=[]; // live-counter connections; closed on every reload so they don't pile up and hit the browser's per-origin limit
+async function load(){const ps=await j('/api/petitions');sources.forEach(s=>s.close());sources=[];$('list').innerHTML='';for(const p of ps){const d=document.createElement('div');d.className='c';
 d.innerHTML=`<h3></h3><div class="b"></div><div class="n" id="n${p.id}">${p.signatures}</div> signatures<br><input placeholder="Name"><input placeholder="you@college.edu"><button>Sign</button> <span class="err"></span>`;
 d.querySelector('h3').textContent=p.title;d.querySelector('.b').innerHTML=clean(p.body);
 const [nm,em]=d.querySelectorAll('input');d.querySelector('button').onclick=async()=>{try{await j(`/api/petitions/${p.id}/sign`,{method:'POST',json:{name:nm.value,email:em.value}});d.querySelector('.err').textContent=''}catch(e){d.querySelector('.err').textContent=e.message}};
-$('list').append(d);new EventSource(`/api/petitions/${p.id}/live`).onmessage=m=>$('n'+p.id).textContent=JSON.parse(m.data).signatures}}
+$('list').append(d);const es=new EventSource(`/api/petitions/${p.id}/live`);es.onmessage=m=>$('n'+p.id).textContent=JSON.parse(m.data).signatures;sources.push(es)}}
 load();
 </script></body></html>

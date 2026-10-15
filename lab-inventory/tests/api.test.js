@@ -66,3 +66,24 @@ test('CSV import upserts, reports bad rows, and export round-trips', async () =>
   assert.equal((await call('/api/items-import', { method: 'POST', token, csv: 'a,b\n1,2' })).status, 400);
   close();
 });
+
+test('blank quantity is rejected instead of silently becoming 0', async () => {
+  const { call, token, close } = await boot();
+  const csv = 'sku,name,lab,quantity,min_quantity\nB1,Bolt,Workshop,,1\nB2,Nut,Workshop,5,1\n';
+  const r = await call('/api/items-import', { method: 'POST', token, csv });
+  assert.equal(r.json.imported, 1);
+  assert.equal(r.json.errors.length, 1);
+  assert.equal(r.json.errors[0].line, 2);
+  assert.equal((await call('/api/items', { method: 'POST', token, body: { sku: 'B3', name: 'Washer', lab: 'Workshop', quantity: '' } })).status, 400);
+  close();
+});
+
+test('createApp refuses to start in production without JWT_SECRET', () => {
+  const prev = { env: process.env.NODE_ENV, secret: process.env.JWT_SECRET };
+  process.env.NODE_ENV = 'production'; delete process.env.JWT_SECRET;
+  try { assert.throws(() => createApp(), /JWT_SECRET/); }
+  finally {
+    if (prev.env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prev.env;
+    if (prev.secret !== undefined) process.env.JWT_SECRET = prev.secret;
+  }
+});
