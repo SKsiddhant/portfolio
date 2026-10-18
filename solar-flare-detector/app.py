@@ -38,6 +38,14 @@ def _params():
     return sigma, prominence
 
 
+def _cell(value):
+    """Neutralise spreadsheet formula injection: the export body is client-supplied, so a string
+    starting with = + - @ (or tab/CR) would be executed by Excel/Sheets when the CSV is opened."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 @app.errorhandler(413)
 def too_large(_exc):
     return jsonify(error="File too large (limit 10 MB)."), 413
@@ -96,7 +104,7 @@ def export():
     w = csv.writer(out)
     w.writerow(["peak_time_s", "peak_flux_W_m2", "rise_time_s", "decay_time_s", "class", "fit_ok"])
     for b in bursts:
-        w.writerow([b["peak_time"], b["peak_flux"], b["rise_time"], b["decay_time"], b["flare_class"], b["fit_ok"]])
+        w.writerow([_cell(b[k]) for k in keys])
     return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=bursts.csv"})
 
 

@@ -79,6 +79,12 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.c.post("/api/export", json={"bursts": [{"peak_time": 1}]}).status_code, 400)
         self.assertEqual(self.c.post("/api/export", data="not json").status_code, 400)
 
+    def test_export_neutralises_formula_cells(self):
+        b = {"peak_time": 1, "peak_flux": 2, "rise_time": 3, "decay_time": 4, "flare_class": "=HYPERLINK(\"http://x\")", "fit_ok": True}
+        text = self.c.post("/api/export", json={"bursts": [b]}).get_data(as_text=True)
+        self.assertIn("'=HYPERLINK", text)
+        self.assertNotIn(",=HYPERLINK", text)
+
 
 if __name__ == "__main__":
     unittest.main()
