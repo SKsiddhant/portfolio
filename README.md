@@ -1,13 +1,11 @@
 # SKsiddhant Portfolio
 
-This repository now includes a simple portfolio landing page at the root so GitHub Pages can publish the site at:
+Live at **https://sksiddhant.github.io/portfolio/**
 
-https://sksiddhant.github.io/portfolio/
-
-The portfolio page links to the project folders already in the repository:
-- accessible-portal
-- lab-inventory
-- petition-platform
-- solar-flare-detector
-
-The existing `accessible-portal/index.html` is the main project page for the accessible portal.
+| Project | What it is |
+| --- | --- |
+| [QuantForge](quantforge/) | Trading-strategy backtester with walk-forward and Monte Carlo analysis. Python engine, React dashboard. [Live demo](https://sksiddhant.github.io/portfolio/quantforge/demo/) |
+| [Accessible Portal](accessible-portal/) | Multilingual student help portal with keyboard support and readability controls |
+| [Lab Inventory](lab-inventory/) | Lab asset tracking with an Express API and React client |
+| [Petition Platform](petition-platform/) | Petition app with an Express API |
+| [Solar Flare Detector](solar-flare-detector/) | Flask app that flags solar flare patterns in signal data |

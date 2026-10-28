@@ -90,10 +90,13 @@ export default function App() {
         setSource((s) => (m[s] ? s : "trending"));
       })
       .catch((e) => setLoadError(`Could not load the sample markets (${e.message}). Load a CSV to continue.`));
-    fetch("api/health")
-      .then((r) => r.ok && r.json())
-      .then((j) => j?.engine === "python" && setServer(true))
-      .catch(() => {});
+    // GitHub Pages has no backend; only look for the Python server when self-hosted
+    if (!location.hostname.endsWith("github.io")) {
+      fetch("api/health")
+        .then((r) => r.ok && r.json())
+        .then((j) => j?.engine === "python" && setServer(true))
+        .catch(() => {});
+    }
   }, []);
 
   const setStrategy = (s) => {
