@@ -6,10 +6,12 @@ and lets you switch to this Python engine and compare the two.
 """
 from __future__ import annotations
 
+import json
 import math
+import queue
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from . import STRATEGIES, Config, analysis, backtest, data as qdata
 
@@ -57,9 +59,13 @@ def _data(body: dict) -> dict:
     return qdata.synthetic(market)
 
 
-def create_app() -> Flask:
+def create_app(gateway=None) -> Flask:
+    from .live.kite import KiteGateway, LiveService
+
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+    live = LiveService(gateway or KiteGateway())
+    app.extensions["quantforge_live"] = live
 
     @app.errorhandler(ValueError)
     def bad_request(e):
@@ -103,6 +109,78 @@ def create_app() -> Flask:
     def parse_csv():
         text = request.get_data(as_text=True)
         return jsonify(qdata.to_json(qdata.load_csv(text)))
+
+    # ------------------------------------------------------------ live (Kite)
+    def kite_installed() -> bool:
+        if gateway is not None:
+            return True
+        try:
+            import kiteconnect  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    @app.get("/kite/login")
+    def kite_login():
+        if not kite_installed():
+            return "Install the Kite client first: pip install kiteconnect", 400
+        if not live.gateway.configured:
+            return ("Kite keys are missing. Create quantforge/.env with KITE_API_KEY=... and "
+                    "KITE_API_SECRET=... from your app at developers.kite.trade, then restart."), 400
+        return redirect(live.gateway.login_url())
+
+    @app.get("/kite/callback")
+    def kite_callback():
+        if request.args.get("status") != "success" or not request.args.get("request_token"):
+            return redirect("/#live?login=failed")
+        live.gateway.complete_login(request.args["request_token"])
+        return redirect("/#live")
+
+    @app.get("/api/live/status")
+    def live_status():
+        g = live.gateway
+        return jsonify(available=kite_installed(), configured=g.configured, connected=g.connected,
+                       user=g.user, symbols=live.symbols, status=live.status, running=live.hub is not None)
+
+    @app.get("/api/live/instruments")
+    def live_instruments():
+        if not live.gateway.connected:
+            raise ValueError("log in to Kite first")
+        return jsonify(live.gateway.search(request.args.get("q", "")))
+
+    @app.post("/api/live/start")
+    def live_start():
+        body = request.get_json(force=True, silent=True) or {}
+        symbols = [str(s).upper() for s in body.get("symbols", [])]
+        capital = float(body.get("capital", 100_000))
+        if not 1_000 <= capital <= 1e9:
+            raise ValueError("capital out of range")
+        live.start(symbols, capital=capital, allow_short=bool(body.get("allow_short", True)))
+        return jsonify(ok=True, symbols=live.symbols)
+
+    @app.post("/api/live/stop")
+    def live_stop():
+        live.stop()
+        return jsonify(ok=True)
+
+    @app.get("/api/live/stream")
+    def live_stream():
+        q: queue.Queue = queue.Queue()
+        live.subscribers.append(q)
+
+        def gen():
+            try:
+                yield f"data: {json.dumps(_json_safe(live.snapshot()))}\n\n"
+                while True:
+                    try:
+                        e = q.get(timeout=15)
+                        yield f"data: {json.dumps(_json_safe(e))}\n\n"
+                    except queue.Empty:
+                        yield ": keep-alive\n\n"
+            finally:
+                live.subscribers.remove(q)
+
+        return Response(gen(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/", defaults={"path": "index.html"})
     @app.get("/<path:path>")

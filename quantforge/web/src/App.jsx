@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Controls from "./components/Controls.jsx";
+import LiveView from "./components/LiveView.jsx";
 import Charts from "./components/Charts.jsx";
 import { MonteCarloPanel, SweepPanel, TradesPanel, WalkForwardPanel } from "./components/Research.jsx";
 import { backtest } from "./engine/analysis.js";
@@ -66,7 +67,35 @@ function useResearch() {
     });
 }
 
+function ModeSwitch({ mode, setMode }) {
+  return (
+    <div className="brand-block">
+      <div className="brand">
+        <svg className="brand-mark" viewBox="0 0 22 14" aria-hidden="true">
+          <path d="M1 12 L6 7 L10 9 L15 3 L21 5" fill="none" stroke="var(--gain)" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+        <h1>QuantForge</h1>
+      </div>
+      <nav className="segmented mode" aria-label="Mode">
+        <button aria-pressed={mode === "backtest"} onClick={() => setMode("backtest")}>Backtest</button>
+        <button aria-pressed={mode === "live"} onClick={() => setMode("live")}>Live intraday</button>
+      </nav>
+    </div>
+  );
+}
+
 export default function App() {
+  const [mode, setModeRaw] = useState(location.hash.startsWith("#live") ? "live" : "backtest");
+  const setMode = (m) => {
+    if (m === "live") history.replaceState(null, "", "#live");
+    else history.replaceState(null, "", location.pathname);
+    setModeRaw(m);
+  };
+  const sw = <ModeSwitch mode={mode} setMode={setMode} />;
+  return mode === "live" ? <LiveView modeSwitch={sw} /> : <BacktestView modeSwitch={sw} />;
+}
+
+function BacktestView({ modeSwitch }) {
   const initial = useMemo(readHash, []);
   const [markets, setMarkets] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -173,6 +202,7 @@ export default function App() {
   return (
     <div className="shell">
       <Controls
+        modeSwitch={modeSwitch}
         markets={markets || {}} source={source} setSource={setSource}
         onCsv={(c) => {
           setCustom(c);

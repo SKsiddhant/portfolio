@@ -83,3 +83,17 @@ test("CSV parser handles NSE-style newest-first files with quoted numbers", () =
   assert.equal(dateKey("31-12-2024"), "2024-12-31");
   assert.throws(() => parseCsv("a,b\n1,2\n3,4"), /missing/);
 });
+
+import { runSession } from "../src/live/engine.js";
+import { intradayCharges } from "../src/live/costs.js";
+
+test("live pipeline: full simulated day gives the same candles, signals, fills and trades as Python", () => {
+  const session = JSON.parse(readFileSync(new URL("../public/data/session.json", import.meta.url)));
+  const { events } = runSession(session);
+  assert.equal(events.length, fx.live_events.length, "event count");
+  close(events, fx.live_events, "live");
+});
+
+test("intraday charges match the Python cost model", () => {
+  assert.deepEqual(intradayCharges(100000, 101000), { brokerage: 40, stt: 25.25, transaction: 6.17, sebi: 0.2, ipft: 0, gst: 8.35, stamp: 3, total: 82.97 });
+});

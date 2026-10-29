@@ -2,3 +2,6 @@ web/node_modules/
 __pycache__/
 .pytest_cache/
 *.pyc
+.env
+.kite_session.json
+sessions/

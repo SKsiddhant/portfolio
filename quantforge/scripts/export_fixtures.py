@@ -50,6 +50,11 @@ def main():
     fixture = {"bars": 700, "cases": cases, "sweep": sweep,
                "strategies": [st.to_dict() for st in q.STRATEGIES.values()],
                "walk_forward": {k: wf[k] for k in ("folds", "oos_equity", "in_sample_sharpe", "efficiency")}}
+    # live pipeline: the full simulated day through the Python engine
+    from quantforge.live import run_session
+    session = json.loads((WEB / "public" / "data" / "session.json").read_text())
+    _, ev = run_session(session)
+    fixture["live_events"] = ev
     fx = WEB / "tests" / "fixtures" / "parity.json"
     fx.parent.mkdir(parents=True, exist_ok=True)
     fx.write_text(json.dumps(fixture, default=lambda o: None))

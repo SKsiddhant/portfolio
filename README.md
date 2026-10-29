@@ -4,7 +4,7 @@ Live at **https://sksiddhant.github.io/portfolio/**
 
 | Project | What it is |
 | --- | --- |
-| [QuantForge](quantforge/) | Trading-strategy backtester with walk-forward and Monte Carlo analysis. Python engine, React dashboard. [Live demo](https://sksiddhant.github.io/portfolio/quantforge/demo/) |
+| [QuantForge](quantforge/) | Live intraday paper trading on Zerodha Kite, plus a backtester with walk-forward and Monte Carlo analysis. [Watch it trade](https://sksiddhant.github.io/portfolio/quantforge/demo/#live) |
 | [Accessible Portal](accessible-portal/) | Multilingual student help portal with keyboard support and readability controls |
 | [Lab Inventory](lab-inventory/) | Lab asset tracking with an Express API and React client |
 | [Petition Platform](petition-platform/) | Petition app with an Express API |

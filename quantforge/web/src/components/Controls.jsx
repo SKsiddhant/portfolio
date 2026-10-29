@@ -5,7 +5,7 @@ import { parseCsv } from "../engine/csv.js";
 const FAMILIES = ["Trend", "Momentum", "Mean reversion", "Volatility", "Benchmark"];
 const fmt = (v, step) => (step < 1 ? v.toFixed(step < 0.5 ? 2 : 1) : String(v));
 
-export default function Controls({ markets, source, setSource, onCsv, strategy, setStrategy, params, setParams, config, setConfig }) {
+export default function Controls({ modeSwitch, markets, source, setSource, onCsv, strategy, setStrategy, params, setParams, config, setConfig }) {
   const [csvError, setCsvError] = useState("");
   const strat = byKey[strategy];
 
@@ -29,12 +29,7 @@ export default function Controls({ markets, source, setSource, onCsv, strategy, 
 
   return (
     <aside className="rail" aria-label="Backtest settings">
-      <div className="brand">
-        <svg className="brand-mark" viewBox="0 0 22 14" aria-hidden="true">
-          <path d="M1 12 L6 7 L10 9 L15 3 L21 5" fill="none" stroke="var(--gain)" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-        <h1>QuantForge</h1>
-      </div>
+      {modeSwitch}
       <p className="tagline">Backtest a trading idea honestly: realistic fills, costs, and tests on data the strategy has never seen.</p>
 
       <fieldset className="group" style={{ border: 0, padding: 0 }}>
