@@ -1,60 +1,137 @@
 import { useEffect, useRef, useState } from 'react';
-import { MeshGradient } from '@paper-design/shaders-react';
+import { PaperTexture } from '@paper-design/shaders-react';
 import { PROFILE, PROJECTS } from './data.js';
 
-function GitIcon() {
+/* build a radial normal map for the water-drop refraction (encodes x/y displacement) */
+function lensMapDataURL(size = 240) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const r = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x - r) / r, dy = (y - r) / r;
+      const d = Math.hypot(dx, dy);
+      let nx = 0, ny = 0, a = 0;
+      if (d < 1) {
+        const ease = Math.pow(d, 2.2) * (1 - d) * 4.2; // rim-weighted refraction
+        nx = (dx / (d || 1)) * ease;
+        ny = (dy / (d || 1)) * ease;
+        a = 1;
+      }
+      const i = (y * size + x) * 4;
+      img.data[i] = Math.max(0, Math.min(255, 128 + nx * 127));
+      img.data[i + 1] = Math.max(0, Math.min(255, 128 + ny * 127));
+      img.data[i + 2] = 128;
+      img.data[i + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c.toDataURL();
+}
+
+function Drops() {
+  const feRef = useRef(null);
+  const dropRef = useRef(null);
+  const map = useRef('');
+  const pos = useRef({ x: -999, y: -999, tx: -999, ty: -999 });
+  const SIZE = 230;
+  useEffect(() => {
+    map.current = lensMapDataURL(SIZE);
+    if (feRef.current) feRef.current.setAttribute('href', map.current);
+    const onMove = (e) => { pos.current.tx = e.clientX; pos.current.ty = e.clientY; };
+    window.addEventListener('pointermove', onMove);
+    let raf;
+    const loop = () => {
+      const p = pos.current;
+      p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
+      if (feRef.current) { feRef.current.setAttribute('x', p.x - SIZE / 2); feRef.current.setAttribute('y', p.y - SIZE / 2); }
+      if (dropRef.current) dropRef.current.style.transform = `translate(${p.x - SIZE / 2}px, ${p.y - SIZE / 2}px)`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { window.removeEventListener('pointermove', onMove); cancelAnimationFrame(raf); };
+  }, []);
   return (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
-    </svg>
+    <>
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="dropFilter" filterUnits="userSpaceOnUse" x="0" y="0" width="6000" height="6000">
+          <feImage ref={feRef} x="-999" y="-999" width={SIZE} height={SIZE} result="lmap" preserveAspectRatio="none" />
+          <feDisplacementMap in="SourceGraphic" in2="lmap" scale="46" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </svg>
+      <div id="lens" />
+      <div className="drop" ref={dropRef} style={{ width: SIZE, height: SIZE, left: 0, top: 0 }} />
+      {/* idle decorative drops */}
+      <div className="drop" style={{ width: 90, height: 90, left: '12%', top: '30%' }} />
+      <div className="drop" style={{ width: 54, height: 54, left: '82%', top: '22%' }} />
+      <div className="drop" style={{ width: 120, height: 120, left: '74%', top: '68%' }} />
+    </>
   );
 }
-const Arrow = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M7 17L17 7M8 7h9v9" /></svg>;
 
 function useReveal() {
   useEffect(() => {
     const io = new IntersectionObserver(
       (es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
-      { threshold: 0.12 }
+      { threshold: 0.1 }
     );
     document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
 }
 
-export default function App() {
-  const [scrolled, setScrolled] = useState(false);
-  const featured = PROJECTS.find((p) => p.featured);
-  const rest = PROJECTS.filter((p) => !p.featured);
-  useReveal();
-  useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 40);
-    on(); addEventListener('scroll', on, { passive: true });
-    return () => removeEventListener('scroll', on);
-  }, []);
+function WorkRow({ p, i, open, onToggle }) {
+  return (
+    <div className={`wrow ${open ? 'open' : ''}`} onClick={onToggle}>
+      <span className="no">{String(i + 1).padStart(2, '0')}</span>
+      <span className="nm">{p.name}{p.featured && <span className="feat">FLAGSHIP</span>}</span>
+      <span className="role">{p.kicker}</span>
+      <span className="plus">+</span>
+      <div className="detail">
+        <p>{p.desc}</p>
+        <div className="tags">{p.tech.map((t) => <span className="tag" key={t}>{t}</span>)}</div>
+        <div className="links" onClick={(e) => e.stopPropagation()}>
+          {p.live && <a className="dlink" href={p.live}>{p.liveLabel || 'Open'} ↗</a>}
+          <a className="dlink" href={p.code} target="_blank" rel="noopener">Source ↗</a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
+export default function App() {
+  const [open, setOpen] = useState(0); // first (QuantForge) open by default
+  useReveal();
   return (
     <>
       <div id="bg">
-        <MeshGradient
+        <PaperTexture
           style={{ width: '100%', height: '100%' }}
-          colors={['#f3ecdd', '#e7d3b6', '#c57b4e', '#2c2a4a']}
-          distortion={0.9}
-          swirl={0.35}
-          speed={0.25}
+          colorBack="#efeadd"
+          colorPaper="#f6f3ea"
+          colorShadow="#d8d2c2"
+          roughness={0.5}
+          fiber={0.45}
+          folds={0.5}
+          wrinkles={0.6}
+          crumples={0.25}
+          crumpleCount={6}
+          scale={0.9}
           minPixelRatio={1}
         />
       </div>
-      <div className="grain" />
+      <Drops />
 
-      <nav className={scrolled ? 'scrolled' : ''}>
+      <nav>
         <div className="in">
-          <a href="#top" className="brand">Siddhant Kothiya</a>
-          <div className="links">
-            <a href="#about">About</a>
-            <a href="#work">Work</a>
-            <a href="#contact">Contact</a>
-            <a className="gh" href={PROFILE.github} target="_blank" rel="noopener">GitHub</a>
+          <a href="#top" className="brand">SIDDHANT KOTHIYA</a>
+          <div className="right">
+            <a className="nl" href="#work">WORK</a>
+            <a className="nl" href="#about">ABOUT</a>
+            <a className="nl" href="#contact">CONTACT</a>
+            <a className="src" href={PROFILE.github} target="_blank" rel="noopener">GITHUB ↗</a>
           </div>
         </div>
       </nav>
@@ -63,64 +140,58 @@ export default function App() {
         {/* hero */}
         <section className="hero" id="top">
           <div className="wrap">
-            <p className="eyebrow reveal">{PROFILE.role}</p>
-            <h1 className="reveal">Building software that <em>works for everyone</em>.</h1>
-            <p className="lead reveal">{PROFILE.intro}</p>
-            <div className="cta reveal">
-              <a className="btn primary" href="#work">View work</a>
-              <a className="btn ghost" href={PROFILE.github} target="_blank" rel="noopener"><GitIcon /> GitHub</a>
+            <p className="kick reveal">{PROFILE.role}</p>
+            <div className="bigword reveal">
+              <span className="blk" />
+              <h1>Siddhant</h1>
+            </div>
+            <div className="sub">
+              <p className="lead reveal">{PROFILE.intro}</p>
+              <p className="meta reveal">BASED IN INDIA<br />FULL-STACK · DATA · A11Y<br />AVAILABLE FOR WORK</p>
             </div>
           </div>
-          <div className="scrollcue">↓ SCROLL</div>
+        </section>
+
+        {/* marquee */}
+        <div className="marquee" aria-hidden="true">
+          <div className="track">
+            {Array.from({ length: 2 }).map((_, k) => (
+              <span key={k}>Selected Work <span className="st">Selected Work</span> Selected Work <span className="st">Selected Work</span>{' '}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* work */}
+        <section id="work">
+          <div className="wrap">
+            <div className="sec-head">
+              <span className="lbl">— Selected Work</span>
+              <span className="count">{String(PROJECTS.length).padStart(2, '0')} Projects</span>
+            </div>
+            <div className="wlist">
+              {PROJECTS.map((p, i) => (
+                <WorkRow key={p.id} p={p} i={i} open={open === i} onToggle={() => setOpen(open === i ? -1 : i)} />
+              ))}
+            </div>
+          </div>
         </section>
 
         {/* about */}
         <section className="about" id="about">
           <div className="wrap">
-            <p className="sec-label reveal">About</p>
-            <div className="cols">
-              <p className="reveal">Full-stack builder with a soft spot for data, finance tooling and accessible design.</p>
-              <div className="facts">
-                <div className="fact reveal"><div className="k">Focus</div><div className="v">Trading systems, APIs, accessible UIs</div></div>
-                <div className="fact reveal"><div className="k">Stack</div><div className="v">Python · Node · React · SQLite · NumPy/SciPy</div></div>
-                <div className="fact reveal"><div className="k">Also</div><div className="v"><a className="link" href={PROFILE.leetcode} target="_blank" rel="noopener">LeetCode solutions →</a></div></div>
+            <div className="sec-head"><span className="lbl">— About</span></div>
+            <p className="statement reveal">I build software that turns rough ideas into things people can actually <em>use.</em></p>
+            <div className="row">
+              <div className="reveal">
+                <div className="k">Focus</div>
+                <p>Trading systems, APIs, scientific tooling, and accessible, multilingual interfaces. I care about clean contracts and careful edge cases.</p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* work */}
-        <section id="work">
-          <div className="wrap">
-            <p className="sec-label reveal">Selected Work</p>
-            <h2 className="sec-title reveal">Things I've built</h2>
-
-            {featured && (
-              <article className="feature reveal">
-                <div className="kick">{featured.kicker}</div>
-                <h3>{featured.name}</h3>
-                <p>{featured.desc}</p>
-                <div className="tags">{featured.tech.map((t) => <span className="tag" key={t}>{t}</span>)}</div>
-                <div className="links">
-                  <a className="btn primary" href={featured.live}>{featured.liveLabel} <Arrow /></a>
-                  <a className="btn ghost" href={featured.code} target="_blank" rel="noopener">Source</a>
-                </div>
-              </article>
-            )}
-
-            <div className="grid">
-              {rest.map((p) => (
-                <article className="card reveal" key={p.id}>
-                  <div className="kick">{p.kicker}</div>
-                  <h4>{p.name}</h4>
-                  <p>{p.desc}</p>
-                  <div className="tags">{p.tech.map((t) => <span className="tag" key={t}>{t}</span>)}</div>
-                  <div className="links">
-                    {p.live && <a className="link" href={p.live}>{p.liveLabel || 'Open'} <Arrow /></a>}
-                    <a className="link muted" href={p.code} target="_blank" rel="noopener">Source</a>
-                  </div>
-                </article>
-              ))}
+              <div className="reveal">
+                <div className="k">Toolkit</div>
+                <p>Python · Node · Express · React · SQLite · NumPy / SciPy · a11y / i18n</p>
+                <div className="k" style={{ marginTop: 18 }}>Also</div>
+                <a href={PROFILE.leetcode} target="_blank" rel="noopener">LeetCode solutions ↗</a>
+              </div>
             </div>
           </div>
         </section>
@@ -128,21 +199,36 @@ export default function App() {
         {/* contact */}
         <section className="contact" id="contact">
           <div className="wrap">
-            <p className="sec-label reveal" style={{ justifyContent: 'center' }}>Contact</p>
-            <h2 className="reveal">Let's make <em>something</em>.</h2>
-            <p className="reveal">Open to internships, projects and collaboration. Email is the fastest way to reach me.</p>
-            <div className="links reveal">
-              <a className="btn primary" href={`mailto:${PROFILE.email}`}>Say hello</a>
-              <a className="btn ghost" href={PROFILE.github} target="_blank" rel="noopener"><GitIcon /> GitHub</a>
-              <a className="btn ghost" href={PROFILE.linkedin} target="_blank" rel="noopener">LinkedIn</a>
-            </div>
+            <div className="sec-head"><span className="lbl">— Contact</span></div>
+            <h2 className="big reveal">Let's talk.</h2>
+            <a className="mail reveal" href={`mailto:${PROFILE.email}`}>{PROFILE.email} ↗</a>
           </div>
         </section>
 
         <footer>
-          <div className="in">
-            <span>© {new Date().getFullYear()} {PROFILE.name}</span>
-            <span>Built with Paper shaders · React</span>
+          <div className="wrap">
+            <div className="cols">
+              <div className="col">
+                <div className="h">Index</div>
+                <a href="#work">Work</a><a href="#about">About</a><a href="#contact">Contact</a>
+              </div>
+              <div className="col">
+                <div className="h">Elsewhere</div>
+                <a href={PROFILE.github} target="_blank" rel="noopener">GitHub ↗</a>
+                <a href={PROFILE.linkedin} target="_blank" rel="noopener">LinkedIn ↗</a>
+                <a href={PROFILE.leetcode} target="_blank" rel="noopener">LeetCode ↗</a>
+              </div>
+              <div className="col">
+                <div className="h">Contact</div>
+                <a href={`mailto:${PROFILE.email}`}>{PROFILE.email}</a>
+              </div>
+              <div className="col">
+                <div className="h">Status</div>
+                <p>Open for work</p><p>{new Date().getFullYear()}</p>
+              </div>
+            </div>
+            <div className="brandbig">Siddhant Kothiya</div>
+            <div className="fine">© {new Date().getFullYear()} SIDDHANT KOTHIYA · BUILT WITH PAPER SHADERS (APACHE-2.0) · NO TRACKERS</div>
           </div>
         </footer>
       </div>
